@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本益比／股價淨值比篩選報表</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: #f5f5f5;
+      color: #202020;
+    }
+
+    body {
+      margin: 0;
+      padding: 2rem clamp(1rem, 2vw, 2.5rem);
+      background: inherit;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: clamp(1.75rem, 3vw, 2.25rem);
+      text-align: center;
+    }
+
+    #status {
+      margin: 1rem auto 2rem;
+      max-width: 720px;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.05);
+      color: inherit;
+    }
+
+    table {
+      width: min(100%, 1200px);
+      margin: 0 auto;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    }
+
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: right;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      font-variant-numeric: tabular-nums;
+    }
+
+    th {
+      text-align: center;
+      background: #0f6ddf;
+      color: #fff;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+
+    tbody tr:nth-child(odd) {
+      background: rgba(15, 109, 223, 0.05);
+    }
+
+    tbody tr:hover {
+      background: rgba(15, 109, 223, 0.1);
+    }
+
+    td.symbol,
+    td.name {
+      text-align: left;
+    }
+
+    @media (max-width: 768px) {
+      table {
+        font-size: 0.9rem;
+      }
+
+      th, td {
+        padding: 0.6rem 0.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>股價淨值比 < 1 且 殖利率 ≥ 5% 的台股列表 (依本益比排序)</h1>
+  <div id="status">資料載入中…</div>
+  <table aria-describedby="status">
+    <thead>
+      <tr>
+        <th scope="col">順位</th>
+        <th scope="col">代號</th>
+        <th scope="col">名稱</th>
+        <th scope="col">殖利率 (%)</th>
+        <th scope="col">本益比</th>
+        <th scope="col">股價淨值比</th>
+        <th scope="col">財報年/季</th>
+      </tr>
+    </thead>
+    <tbody id="result-body">
+    </tbody>
+  </table>
+  <script>
+    const API_ENDPOINT = "https://www.twse.com.tw/exchangeReport/BWIBBU_d?response=json&selectType=ALL";
+
+    /**
+     * 將字串轉成數值，遇到無效值回傳 NaN。
+     */
+    function toNumber(value) {
+      if (value === null || value === undefined) return NaN;
+      const trimmed = String(value).trim();
+      if (trimmed === "" || trimmed === "-" || trimmed === "NaN") return NaN;
+      return Number(trimmed.replace(/,/g, ""));
+    }
+
+    /**
+     * 取出符合條件的股票並依本益比排序。
+     */
+    function filterAndSort(rows) {
+      return rows
+        .map((row) => {
+          const [
+            symbol,
+            name,
+            dividendYield,
+            dividendYear,
+            peRatio,
+            pbRatio,
+            financialQuarter
+          ] = row;
+
+          return {
+            symbol,
+            name,
+            dividendYield: toNumber(dividendYield),
+            dividendYear,
+            peRatio: toNumber(peRatio),
+            pbRatio: toNumber(pbRatio),
+            financialQuarter: financialQuarter || ""
+          };
+        })
+        .filter((item) => {
+          return (
+            !Number.isNaN(item.dividendYield) &&
+            !Number.isNaN(item.pbRatio) &&
+            item.dividendYield >= 5 &&
+            item.pbRatio < 1
+          );
+        })
+        .sort((a, b) => {
+          if (Number.isNaN(a.peRatio) && Number.isNaN(b.peRatio)) return 0;
+          if (Number.isNaN(a.peRatio)) return 1;
+          if (Number.isNaN(b.peRatio)) return -1;
+          return a.peRatio - b.peRatio;
+        });
+    }
+
+    /**
+     * 建立表格列。
+     */
+    function renderRows(data) {
+      const tbody = document.getElementById("result-body");
+      tbody.innerHTML = "";
+
+      data.forEach((item, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td class="symbol">${item.symbol}</td>
+          <td class="name">${item.name}</td>
+          <td>${item.dividendYield.toFixed(2)}</td>
+          <td>${Number.isNaN(item.peRatio) ? "—" : item.peRatio.toFixed(2)}</td>
+          <td>${item.pbRatio.toFixed(2)}</td>
+          <td>${item.financialQuarter}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadData() {
+      const statusEl = document.getElementById("status");
+      try {
+        const response = await fetch(API_ENDPOINT, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`API 回應狀態碼：${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (!payload || !Array.isArray(payload.data)) {
+          throw new Error("API 回傳格式不符合預期");
+        }
+
+        const filtered = filterAndSort(payload.data);
+
+        if (!filtered.length) {
+          statusEl.textContent = "沒有符合條件的股票資料。";
+        } else {
+          statusEl.textContent = `共 ${filtered.length} 檔符合條件 (更新時間：${payload.date || "未知"})。`;
+        }
+        renderRows(filtered);
+      } catch (error) {
+        console.error(error);
+        statusEl.textContent = `載入資料失敗：${error.message}`;
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
