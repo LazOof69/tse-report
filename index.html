@@ -92,6 +92,7 @@
         <th scope="col">順位</th>
         <th scope="col">代號</th>
         <th scope="col">名稱</th>
+        <th scope="col">收盤價</th>
         <th scope="col">殖利率 (%)</th>
         <th scope="col">本益比</th>
         <th scope="col">股價淨值比</th>
@@ -123,6 +124,7 @@
           const [
             symbol,
             name,
+            closingPrice,
             dividendYield,
             dividendYear,
             peRatio,
@@ -133,6 +135,7 @@
           return {
             symbol,
             name,
+            closingPrice: toNumber(closingPrice),
             dividendYield: toNumber(dividendYield),
             dividendYear,
             peRatio: toNumber(peRatio),
@@ -169,6 +172,7 @@
           <td>${idx + 1}</td>
           <td class="symbol">${item.symbol}</td>
           <td class="name">${item.name}</td>
+          <td>${Number.isNaN(item.closingPrice) ? "—" : item.closingPrice.toFixed(2)}</td>
           <td>${item.dividendYield.toFixed(2)}</td>
           <td>${Number.isNaN(item.peRatio) ? "—" : item.peRatio.toFixed(2)}</td>
           <td>${item.pbRatio.toFixed(2)}</td>
